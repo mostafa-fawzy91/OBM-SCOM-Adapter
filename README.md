@@ -131,25 +131,5 @@ This guide targets platform and site reliability engineers accountable for deplo
 - **Encryption**: Enforce TLS 1.2+ and store secrets with AES-256.
 - **Access Reviews**: Periodically review who can modify configuration or replay DLQ.
 
-## 11. Appendices
-- **Appendix A – Default Ports**: Backend API (3000), Dashboard (5173 dev/ built static host), Metrics (3000 `/metrics`).
-- **Appendix B – Service Control Commands**:
-  ```powershell
-  # Windows service example
-  nssm install ScomObmAdapter "C:\Program Files\nodejs\node.exe" "C:\adapter\backend\dist\index.js"
-  nssm start ScomObmAdapter
 
-  # Systemd example
-  systemctl enable scom-obm-adapter
-  systemctl start scom-obm-adapter
-  systemctl status scom-obm-adapter
-  ```
-- **Appendix C – References**:
-  - `SCOM-OBM-Adapter-PRD.md`
-  - `Cursor-AI-Workflow.md`
-  - Configuration Guide
-  - High- and Low-Level Design documents
-
----
-Maintain this guide in version control and adapt sections for your organization’s change management, security, and DR procedures.
 

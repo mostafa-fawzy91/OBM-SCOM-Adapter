@@ -1,0 +1,15 @@
+<scom_event_message>
+  <Name>Server Down</Name>
+  <Severity>Critical</Severity>
+  <Description>Server is unreachable</Description>
+  <NetbiosComputerName>HOST01</NetbiosComputerName>
+  <MonitoringObjectPath>Windows Computer.Hosting</MonitoringObjectPath>
+  <Category>Availability</Category>
+  <TimeRaised>11/09/2025 19:30:00</TimeRaised>
+</scom_event_message>
+<scom_event_message>
+  <Name>CPU High</Name>
+  <Severity>Warning</Severity>
+  <Description>CPU usage above threshold</Description>
+</scom_event_message>
+

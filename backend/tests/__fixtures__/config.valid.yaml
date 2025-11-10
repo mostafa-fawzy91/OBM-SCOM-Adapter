@@ -1,0 +1,97 @@
+environment: test
+obm:
+  baseUrl: "https://example.com"
+  eventEndpoint: "/api/events"
+  auth:
+    method: "basic"
+    username: "user"
+    password: "pass"
+  tls:
+    verify: false
+    minVersion: "TLSv1.2"
+    allowSelfSigned: true
+  rateLimitMs: 100
+  connectionTimeoutMs: 1000
+  readTimeoutMs: 2000
+  keepAlive: true
+  maxSockets: 5
+scom:
+  xmlDirectory: "./tests/__fixtures__"
+  filePattern: "*.xml"
+  pollingIntervalMs: 5000
+  encoding: "utf8"
+  concurrentParsers: 1
+  maxFileSizeMb: 10
+processing:
+  batchSize: 10
+  batchTimeoutMs: 5000
+  maxConcurrentBatches: 2
+  queueCapacity: 100
+  rateLimitMs: 100
+  maxEventsPerFile: 100
+retry:
+  maxAttempts: 3
+  initialDelayMs: 100
+  maxDelayMs: 1000
+  backoffMultiplier: 2
+  jitterFactor: 0.1
+  retryableStatusCodes: [500]
+  retryableErrors: ["ECONNRESET"]
+  budgetPerMinute: 100
+circuitBreaker:
+  failureThreshold: 5
+  successThreshold: 2
+  timeoutMs: 1000
+  volumeThreshold: 5
+  errorThresholdPercentage: 50
+  halfOpenMaxCalls: 2
+dlq:
+  enabled: true
+  directory: "./tests/.tmp/dlq"
+  fileName: "dlq.jsonl"
+  maxFileSizeMb: 5
+  maxEvents: 100
+  rotationStrategy: "size"
+  retentionDays: 10
+  alertThreshold: 10
+logging:
+  level: "info"
+  prettyPrint: false
+  directory: "./tests/.tmp/logs"
+  maxSizeMb: 10
+  maxFiles: 3
+  includeRequestId: true
+  redact: ["password"]
+metrics:
+  enabled: true
+  port: 9100
+  path: "/metrics"
+  defaultLabels:
+    service: "test"
+dashboard:
+  enabled: true
+  port: 3100
+  host: "127.0.0.1"
+  corsOrigins: ["http://localhost:5173"]
+  sessionTimeoutMinutes: 15
+audit:
+  directory: "./tests/.tmp/audit"
+  retentionDays: 30
+  maxFileSizeMb: 5
+  exportDirectory: "./tests/.tmp/audit/exports"
+security:
+  credentialStore: "file"
+  credentialStoreNamespace: "test"
+  redactFields: ["password"]
+monitoring:
+  alertEvaluationIntervalMs: 60000
+  alertRules: []
+  notifications:
+    email:
+      enabled: false
+      to: []
+    webhook:
+      enabled: false
+    slack:
+      enabled: false
+

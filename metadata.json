@@ -1,0 +1,5 @@
+{
+  "name": "SCOM to OBM Integration Adapter",
+  "description": "A web-based tool to parse Microsoft SCOM event XML files and post them to an OpenText OBM instance. This application provides a user-friendly interface to configure OBM endpoint details, upload SCOM data, preview events, and monitor the integration process in real-time.",
+  "requestFramePermissions": []
+}

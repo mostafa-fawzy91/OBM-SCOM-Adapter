@@ -1,0 +1,310 @@
+# SCOM to OBM Event Integration Script - SIMPLIFIED FORMAT
+# Minimal JSON structure for OBM events
+
+# ============================================================================
+# CONFIGURATION - Update with your credentials
+# ============================================================================
+
+$OBMBaseURL = "https://ecsrlnobmapp01.ecmi.com.eg"
+$OBMAPIEndpoint = "$OBMBaseURL/opr-web/rest/9.10/event_list"
+$OBMUsername = "yousef"
+$OBMPassword = 'WenbyYaApi.1'
+$XMLFilePath = "C:\ProgramData\HP\HP BTO Software\datafiles\HPBsmIntSCOM\SCOM2022\output\scom_events.xml"
+$VerifySSL = $false
+$DelayBetweenPosts = 500
+
+# ============================================================================
+# SSL CERTIFICATE HANDLING
+# ============================================================================
+
+if (-not $VerifySSL) {
+    Add-Type @"
+        using System.Net;
+        using System.Security.Cryptography.X509Certificates;
+        public class TrustAllCertsPolicy : ICertificatePolicy {
+            public bool CheckValidationResult(
+                ServicePoint srvPoint, X509Certificate certificate,
+                WebRequest request, int certificateProblem) {
+                return true;
+            }
+        }
+"@
+    [System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls11
+}
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+function Get-XMLElementText {
+    param(
+        [System.Xml.XmlElement]$Element,
+        [string]$Tag,
+        [string]$Default = ""
+    )
+
+    $child = $Element.SelectSingleNode($Tag)
+    if ($null -ne $child -and -not [string]::IsNullOrWhiteSpace($child.InnerText)) {
+        return $child.InnerText.Trim()
+    }
+    return $Default
+}
+
+function Map-Severity {
+    param([string]$SCOMSeverity)
+    $SeverityMap = @{
+        'Critical' = 'critical'
+        'Error' = 'critical'
+        'Warning' = 'warning'
+        'Information' = 'normal'
+        'Informational' = 'normal'
+    }
+    if ($SeverityMap.ContainsKey($SCOMSeverity)) { return $SeverityMap[$SCOMSeverity] }
+    return 'warning'
+}
+
+function Format-DateTime {
+    param([string]$DateTimeStr)
+    if ([string]::IsNullOrWhiteSpace($DateTimeStr)) {
+        return (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss+02:00')
+    }
+    try {
+        $dt = [datetime]::ParseExact($DateTimeStr, 'M/d/yyyy HH:mm:ss', $null)
+        return $dt.ToString('yyyy-MM-ddTHH:mm:ss+02:00')
+    }
+    catch {
+        try {
+            $dt = [datetime]::Parse($DateTimeStr)
+            return $dt.ToString('yyyy-MM-ddTHH:mm:ss+02:00')
+        }
+        catch {
+            return $DateTimeStr
+        }
+    }
+}
+
+function Parse-XMLEvents {
+    param([string]$XMLFile)
+
+    Write-Host "Reading XML file: $XMLFile"
+    if (-not (Test-Path $XMLFile)) {
+        Write-Error "File not found!"
+        exit 1
+    }
+
+    try {
+        $xmlContent = Get-Content -Path $XMLFile -Raw -Encoding UTF8
+        Write-Host "File loaded: $(($xmlContent | Measure-Object -Character).Characters) characters"
+    }
+    catch {
+        Write-Error "Failed to read: $_"
+        exit 1
+    }
+
+    $xmlContent = "<root>$xmlContent</root>"
+
+    try {
+        $xmlDoc = New-Object System.Xml.XmlDocument
+        $xmlDoc.LoadXml($xmlContent)
+    }
+    catch {
+        Write-Error "Failed to parse XML: $_"
+        exit 1
+    }
+
+    $events = $xmlDoc.SelectNodes('//scom_event_message')
+    Write-Host "Found $($events.Count) events`n"
+
+    $obmEvents = @()
+    foreach ($event in $events) {
+        try {
+            # Extract fields
+            $name = Get-XMLElementText -Element $event -Tag 'Name'
+            $severity = Get-XMLElementText -Element $event -Tag 'Severity'
+            $description = Get-XMLElementText -Element $event -Tag 'Description'
+            $netbiosComputer = Get-XMLElementText -Element $event -Tag 'NetbiosComputerName'
+            $monitoringObjectPath = Get-XMLElementText -Element $event -Tag 'MonitoringObjectPath'
+            $category = Get-XMLElementText -Element $event -Tag 'Category'
+
+            if ($description.Length -gt 1000) {
+                $description = $description.Substring(0, 1000) + "..."
+            }
+
+            # Build simplified OBM event - no extra wrappers
+            $obmEvent = @{
+                event = @{
+                    title       = $name
+                    severity    = Map-Severity -SCOMSeverity $severity
+                    source      = "SCOM"
+                    category    = if ([string]::IsNullOrWhiteSpace($category)) { "Alert" } else { $category }
+                    application = "SCOM"
+                    object      = if ([string]::IsNullOrWhiteSpace($netbiosComputer)) { $monitoringObjectPath } else { $netbiosComputer }
+                    description = $description
+                }
+            }
+
+            $obmEvents += $obmEvent
+        }
+        catch {
+            Write-Error "Error: $_"
+            continue
+        }
+    }
+
+    return $obmEvents
+}
+
+function Post-EventToOBM {
+    param(
+        [PSCustomObject]$Event,
+        [string]$Username,
+        [string]$Password
+    )
+
+    try {
+        $eventJson = $Event | ConvertTo-Json -Depth 10 -Compress
+
+        # Create Basic Auth header
+        $pair = "$($Username):$($Password)"
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($pair)
+        $encodedCreds = [System.Convert]::ToBase64String($bytes)
+        $basicAuthValue = "Basic $encodedCreds"
+
+        # Use WebClient for better PS 5.1 compatibility
+        $webClient = New-Object System.Net.WebClient
+        $webClient.Headers.Add('Authorization', $basicAuthValue)
+        $webClient.Headers.Add('Content-Type', 'application/json')
+        $webClient.Headers.Add('Accept', 'application/json')
+
+        # Convert JSON to UTF-8 bytes
+        $bodyBytes = [System.Text.Encoding]::UTF8.GetBytes($eventJson)
+
+        # Post the data
+        $responseBytes = $webClient.UploadData($OBMAPIEndpoint, 'POST', $bodyBytes)
+        $responseString = [System.Text.Encoding]::UTF8.GetString($responseBytes)
+
+        # Return success response
+        return @{
+            StatusCode = 200
+            Content = $responseString
+        }
+    }
+    catch [System.Net.WebException] {
+        $ex = $_.Exception
+        $statusCode = 500
+
+        if ($ex.Response) {
+            $statusCode = [int]$ex.Response.StatusCode
+            $statusDesc = $ex.Response.StatusDescription
+
+            try {
+                $stream = $ex.Response.GetResponseStream()
+                $stream.Position = 0
+                $reader = New-Object System.IO.StreamReader($stream)
+                $responseBody = $reader.ReadToEnd()
+                $reader.Close()
+                $stream.Close()
+
+                if ($responseBody) {
+                    Write-Error "HTTP $statusCode - $statusDesc : $responseBody"
+                }
+                else {
+                    Write-Error "HTTP $statusCode - $statusDesc"
+                }
+            }
+            catch {
+                Write-Error "HTTP $statusCode - $statusDesc"
+            }
+        }
+        else {
+            Write-Error "Error: $($ex.Message)"
+        }
+
+        return $null
+    }
+    catch {
+        Write-Error "ERROR: $($_.Exception.Message)"
+        return $null
+    }
+}
+
+function Main {
+    Write-Host ""
+    Write-Host "======================================================================"
+    Write-Host "SCOM to OBM Event Integration - SIMPLIFIED FORMAT"
+    Write-Host "======================================================================"
+    Write-Host ""
+
+    $obmEvents = Parse-XMLEvents -XMLFile $XMLFilePath
+
+    if ($obmEvents.Count -eq 0) {
+        Write-Host "No events to process."
+        exit 0
+    }
+
+    Write-Host "Parsed $($obmEvents.Count) events successfully"
+
+    try {
+        $obmEvents | ConvertTo-Json -Depth 10 | Out-File -FilePath 'obm_events.json' -Encoding UTF8
+        Write-Host "Saved to: obm_events.json"
+    }
+    catch {
+        Write-Host "Warning: Could not save JSON: $_" -ForegroundColor Yellow
+    }
+
+    Write-Host ""
+    Write-Host "OBM Configuration:"
+    Write-Host "  Endpoint: $OBMAPIEndpoint"
+    Write-Host "  Username: $OBMUsername"
+    Write-Host ""
+    Write-Host "Press Enter to post events or Ctrl+C to cancel..."
+    Read-Host
+
+    Write-Host ""
+    Write-Host "======================================================================"
+    Write-Host "Posting $($obmEvents.Count) events..."
+    Write-Host "======================================================================"
+    Write-Host ""
+
+    $successCount = 0
+    $failCount = 0
+
+    foreach ($idx in 0..($obmEvents.Count - 1)) {
+        $event = $obmEvents[$idx]
+        $eventTitle = $event.event.title
+        if ($eventTitle.Length -gt 60) { $eventTitle = $eventTitle.Substring(0, 57) + "..." }
+
+        Write-Host "[$(($idx + 1))/$($obmEvents.Count)] $eventTitle"
+
+        try {
+            $response = Post-EventToOBM -Event $event -Username $OBMUsername -Password $OBMPassword
+            if ($null -ne $response) {
+                Write-Host "         Status: $($response.StatusCode) SUCCESS" -ForegroundColor Green
+                $successCount++
+            }
+            else {
+                Write-Host "         FAILED" -ForegroundColor Red
+                $failCount++
+            }
+        }
+        catch {
+            Write-Host "         FAILED: $_" -ForegroundColor Red
+            $failCount++
+        }
+
+        if ($idx -lt ($obmEvents.Count - 1)) {
+            Start-Sleep -Milliseconds $DelayBetweenPosts
+        }
+    }
+
+    Write-Host ""
+    Write-Host "======================================================================"
+    Write-Host "RESULTS:"
+    Write-Host "  Total:  $($obmEvents.Count)"
+    Write-Host "  OK:     $successCount" -ForegroundColor Green
+    Write-Host "  Failed: $failCount" -ForegroundColor Red
+    Write-Host "======================================================================"
+}
+
+Main

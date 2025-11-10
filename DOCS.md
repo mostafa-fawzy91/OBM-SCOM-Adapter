@@ -286,4 +286,5 @@ monitoring:
 - [`docs/ConfigurationGuide.md`](docs/ConfigurationGuide.md) – Detailed configuration schema, hot reload behavior, overrides, and API-driven updates.
 - [`docs/HLD.md`](docs/HLD.md) – Solution-level architecture, integration points, and non-functional requirements.
 - [`docs/LLD.md`](docs/LLD.md) – Module-level design, sequence flows, data models, and testing strategy.
+- [`docs/QualityAssurance.md`](docs/QualityAssurance.md) – Test statistics, verification inventory, reliability posture, and security assurances.
 

@@ -280,3 +280,10 @@ monitoring:
 - Automated DLQ replay scheduling and bulk export tooling.
 - Additional dashboard charts (latency histograms, retry heatmaps) and dark/light themes.
 
+## 13. Extended Documentation Set
+- [`docs/UserGuide.md`](docs/UserGuide.md) – Day-to-day operator instructions for using the dashboard, replaying DLQ events, and rotating secrets.
+- [`docs/AdminGuide.md`](docs/AdminGuide.md) – Deployment, security hardening, maintenance schedules, and incident response runbooks.
+- [`docs/ConfigurationGuide.md`](docs/ConfigurationGuide.md) – Detailed configuration schema, hot reload behavior, overrides, and API-driven updates.
+- [`docs/HLD.md`](docs/HLD.md) – Solution-level architecture, integration points, and non-functional requirements.
+- [`docs/LLD.md`](docs/LLD.md) – Module-level design, sequence flows, data models, and testing strategy.
+
